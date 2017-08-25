@@ -1,0 +1,2 @@
+recursive-include tm470webapp/templates *
+recursive-include tm470webapp/static *
