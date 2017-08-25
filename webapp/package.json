@@ -1,0 +1,9 @@
+{
+  "name": "webapp",
+  "version": "0.0.1",
+  "description": "Flask web app for database admin",
+  "main": "index.js",
+  "repository": "https://github.com/jo-tez/tm470",
+  "author": "Jo Tez",
+  "license": "MIT"
+}
