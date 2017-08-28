@@ -8,18 +8,19 @@ from jinja2 import Markup
 from flask_admin import Admin, form
 from flask_admin.form import rules
 from flask_admin.contrib import sqla
-
-import tm470webapp.views
+from wtforms import fields, validators
+from wtforms import form as wtform
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Create application
-app = Flask('tm470webapp')
+app = Flask(__name__)
 
 # Create secrey key so we can use sessions
 app.config['SECRET_KEY'] = 'r15Joii3oDRnm0K'
-
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://Joachim:@localhost/tm470'
 app.config['SQLALCHEMY_ECHO'] = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
 
 
@@ -44,6 +45,9 @@ class File(db.Model):
     def __unicode__(self):
         return self.name
 
+    def __str__(self):
+        return self.name
+
 
 class User(db.Model):
     '''
@@ -52,10 +56,55 @@ class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     first_name = db.Column(db.String(50))
-    username = db.Column(db.String(50))
+    username = db.Column(db.String(50), unique=True)
     last_name = db.Column(db.String(50))
     email = db.Column(db.String(255))
-    password = db.Column(db.String(255))
+    password = db.Column(db.String(50))
+
+    def __str__(self):
+        return self.username
+
+    def __unicode__(self):
+        return self.username
+
+
+class PayPeriod(db.Model):
+    __tablename__ = 'pay_periods'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    period_name = db.Column(db.String(255))
+    start_date = db.Column(db.Date)
+    end_date = db.Column(db.Date)
+    cutoff_date = db.Column(db.Date)
+
+    def __str__(self):
+        return self.period_name
+
+    def __unicode__(self):
+        return self.period_name
+
+
+class PayGrade(db.Model):
+    __tablename__ = 'pay_grades'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    grade_name = db.Column(db.String(255))
+
+    def __str__(self):
+        return self.grade_name
+
+    def __unicode__(self):
+        return self.grade_name
+
+
+class PayRange(db.Model):
+    __tablename__ = 'pay_ranges'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    grade_id = db.Column(db.Integer, db.ForeignKey(PayGrade.id))
+    period_id = db.Column(db.Integer, db.ForeignKey(PayPeriod.id))
+    min = db.Column(db.Integer)
+    max = db.Column(db.Integer)
+
+    grade = db.relationship(PayGrade, backref='pay_grades')
+    period = db.relationship(PayPeriod, backref='pay_periods')
 
 
 # Delete hooks for models, delete files if models are getting deleted
@@ -70,7 +119,7 @@ def del_file(mapper, connection, target):
 
 
 # Administrative views
-class FileView(sqla.ModelView):
+class FileAdmin(sqla.ModelView):
     '''
     File view definition
     '''
@@ -91,10 +140,15 @@ class FileView(sqla.ModelView):
     }
 
 
-class UserView(sqla.ModelView):
+class UserAdmin(sqla.ModelView):
     '''
     This class demonstrates the use of 'rules' for controlling the rendering of forms.
     '''
+    column_exclude_list = ['password', ]
+
+    # Override password filed
+    form_overrides = dict(password=fields.PasswordField)
+
     form_create_rules = [
         # Header and four fields. Email field will go into separate Contact section
         rules.FieldSet(('first_name', 'last_name',
@@ -111,16 +165,47 @@ class UserView(sqla.ModelView):
     form_edit_rules = form_create_rules
 
 
+class PayPeriodAdmin(sqla.ModelView):
+    '''
+    Pay period admin
+    '''
+    form_columns = ['period_name', 'start_date', 'end_date', 'cutoff_date']
+
+
+class PayGradeAdmin(sqla.ModelView):
+    '''
+    Grade admin view
+    '''
+    can_create = True
+    can_delete = False
+    column_editable_list = ['grade_name']
+
+
+class PayRangeAdmin(sqla.ModelView):
+    '''
+    Pay range admin view
+    '''
+
+    form_columns = [
+        'grade',
+        'period',
+        'min',
+        'max'
+    ]
+
+    # Enable CSV export
+    can_export = True
+
+
 # Create admin
 admin = Admin(app, 'tm470 webapp', template_mode='bootstrap3')
 
 # Add views
-admin.add_view(FileView(File, db.session, name='Files'))
-admin.add_view(UserView(User, db.session, name='Users'))
+admin.add_view(FileAdmin(File, db.session, name='Files'))
+admin.add_view(UserAdmin(User, db.session, name='Users'))
+admin.add_view(PayPeriodAdmin(PayPeriod, db.session, category='Pay Model', name='Periods'))
+admin.add_view(PayGradeAdmin(PayGrade, db.session, category='Pay Model', name='Grades'))
+admin.add_view(PayRangeAdmin(PayRange, db.session, category='Pay Model', name='Pay Ranges'))
 
-# Flask views
-@app.route('/')
-def index():
-        # return 'Hello World!'
-        # db.create_all()
-    return '<a href="/admin/">Click here to get to Admin!</a>'
+import tm470webapp.views
+
